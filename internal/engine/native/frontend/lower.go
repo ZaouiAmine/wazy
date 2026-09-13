@@ -1738,14 +1738,10 @@ func (c *Compiler) lowerCurrentOpcode() {
 		state.pc++
 		vecOp, vecOpSize := wasm.ReadVecOpcode(c.wasmFunctionBody, state.pc)
 		state.pc += vecOpSize - 1
-		// Refuse before lowering rather than emit a vector instruction this CPU
-		// cannot execute. The engine turns the panic into an error naming the
-		// module, so the module is rejected instead of the process dying; see
-		// simdEmulated.
-		if emulateSIMD && !state.unreachable && !simdEmulated[vecOp] {
-			panic("TODO: no scalar lowering yet for " + wasm.VectorInstructionName(vecOp) +
-				" on a CPU without a vector unit")
-		}
+		// Refuse before lowering rather than emit a vector instruction the CPU
+		// cannot execute. Nothing off riscv64 can be in that position, so this is
+		// a no-op there; see requireEmulatedVecOp.
+		c.requireEmulatedVecOp(vecOp, state.unreachable)
 		switch vecOp {
 		case wasm.OpcodeVecV128Const:
 			state.pc++

@@ -25,7 +25,7 @@ func TestCompiler_LowerToSSA(t *testing.T) {
 	// The expected SSA below is the vector lowering, so pin the mode rather than
 	// take the host's: on a CPU with no vector unit the frontend lowers v128 to
 	// scalar pairs instead, and these goldens would describe the wrong thing.
-	defer withSIMDEmulation(false)()
+	defer pinVectorLowering()()
 
 	// Most of the logic should look similar to Cranelift's Wasm frontend, so when you want to see
 	// what output should look like, you can run:

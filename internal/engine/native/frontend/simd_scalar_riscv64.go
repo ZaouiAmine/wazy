@@ -54,6 +54,21 @@ var simdEmulated = map[wasm.OpcodeVec]bool{
 	wasm.OpcodeVecI64x2Sub:   true,
 }
 
+// requireEmulatedVecOp refuses a module whose vector opcode has no scalar lowering
+// yet, before that opcode is lowered.
+//
+// The alternative is emitting a vector instruction the CPU cannot execute, which
+// is an illegal instruction at run time with no stack trace worth reading. The
+// engine's compile path recovers the panic into an error naming the module, so the
+// module is rejected and the host survives; a partial ledger can therefore never
+// become a SIGILL.
+func (c *Compiler) requireEmulatedVecOp(vecOp wasm.OpcodeVec, unreachable bool) {
+	if emulateSIMD && !unreachable && !simdEmulated[vecOp] {
+		panic("TODO: no scalar lowering yet for " + wasm.VectorInstructionName(vecOp) +
+			" on a CPU without a vector unit")
+	}
+}
+
 // withSIMDEmulation forces the mode and returns a function restoring it, so a test
 // can pin which lowering it is describing instead of inheriting the host's CPU.
 func withSIMDEmulation(on bool) func() {

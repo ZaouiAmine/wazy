@@ -19,3 +19,9 @@ func TestSIMDEmulatedLedgerNamesRealOpcodes(t *testing.T) {
 	}
 	t.Logf("scalar lowerings: %d of the vector opcodes", len(simdEmulated))
 }
+
+// pinVectorLowering forces the vector lowering for a test whose expectations
+// describe it, instead of letting the host's CPU decide: on a riscv64 without the
+// vector extension the frontend lowers v128 to scalar pairs, and goldens written
+// against vector instructions would describe the wrong thing.
+func pinVectorLowering() func() { return withSIMDEmulation(false) }
