@@ -115,7 +115,32 @@ func executableMmapSupported() bool {
 // silicon is still worth doing.
 func riscv64CompilerSupports(features api.CoreFeatures) bool {
 	if features.IsEnabled(api.CoreFeatureSIMD) {
-		return CpuFeatures.Has(CpuFeatureRiscv64V)
+		return CpuFeatures.Has(CpuFeatureRiscv64V) || RiscV64NoSIMDFallback
 	}
 	return true
+}
+
+// RiscV64NoSIMDFallback stops a riscv64 without the vector extension from handing
+// SIMD modules to the interpreter, so the compiler takes them and lowers v128 to
+// scalar pairs instead.
+//
+// For tests. The fallback is the right default while that lowering covers only
+// part of the vector opcode set -- an opcode it does not cover refuses the module,
+// which is a worse outcome for a caller than the interpreter running it correctly
+// -- but the lowering cannot be developed or verified without a way to reach it.
+//
+// Process-wide, and it changes what the compiler emits, so a compilation cache
+// must not be shared across a change of it.
+var RiscV64NoSIMDFallback bool
+
+// RiscV64EmulatesSIMD reports whether the compiler lowers v128 to pairs of 64-bit
+// words rather than to vector instructions.
+//
+// riscv64 only, deliberately. The vector extension is optional there and most
+// shipping silicon lacks it, while SIMD is part of CoreFeaturesV2 and so of wazy's
+// default -- which made SIMD withhold the compiler from every module on such a
+// machine, v128-using or not. Nothing else has that shape: amd64 does not select
+// the compiler at all without SSE4.1, and arm64 always has NEON.
+func RiscV64EmulatesSIMD() bool {
+	return runtime.GOARCH == "riscv64" && !CpuFeatures.Has(CpuFeatureRiscv64V)
 }

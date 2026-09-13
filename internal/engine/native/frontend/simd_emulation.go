@@ -29,12 +29,13 @@ import (
 
 // emulateSIMD reports whether the vector opcodes are lowered to scalar pairs.
 //
-// A property of the machine, not of a configuration: it is the same answer for
-// every module in the process, and a module compiled one way must never be served
-// from cache to a runtime expecting the other. Tests override it to exercise the
-// scalar paths on a host that has a vector unit, which is the only way this gets
-// developed at a reasonable pace.
-var emulateSIMD = !platform.SIMDSupported()
+// A property of the machine, not of a configuration: the same answer for every
+// module in the process, and a module compiled one way must never be served from
+// cache to a runtime expecting the other.
+//
+// riscv64 only -- see platform.RiscV64EmulatesSIMD for why nothing else has this
+// shape. An amd64 without SSE4.1 does not reach here: it has no compiler at all.
+var emulateSIMD = platform.RiscV64EmulatesSIMD()
 
 // simdEmulated is the ledger of vector opcodes lowered without a vector unit.
 //
@@ -152,14 +153,3 @@ func withSIMDEmulation(on bool) func() {
 	emulateSIMD = on
 	return func() { emulateSIMD = prev }
 }
-
-// SetEmulateSIMD forces the mode for the whole process and returns a function
-// restoring it. Exported for the spec suites, which run the scalar lowering
-// against the specification's own SIMD assertions on whatever host is to hand:
-// that is the only gate strong enough for code that reimplements every vector
-// operation, and waiting for riscv64 hardware to run it would be no gate at all.
-//
-// Process-wide, and it changes what the compiler emits, so it is for tests. A
-// compilation cache is keyed on the module and its features, not on this, so do
-// not share one across a change of mode.
-func SetEmulateSIMD(on bool) (restore func()) { return withSIMDEmulation(on) }
