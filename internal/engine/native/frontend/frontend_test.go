@@ -22,6 +22,11 @@ func TestCompiler_LowerToSSA(t *testing.T) {
 		// and arm64, so 64-bit is the only layout it ever emits code for.
 		t.Skip("the native compiler does not run on a 32-bit platform")
 	}
+	// The expected SSA below is the vector lowering, so pin the mode rather than
+	// take the host's: on a CPU with no vector unit the frontend lowers v128 to
+	// scalar pairs instead, and these goldens would describe the wrong thing.
+	defer withSIMDEmulation(false)()
+
 	// Most of the logic should look similar to Cranelift's Wasm frontend, so when you want to see
 	// what output should look like, you can run:
 	// `~/wasmtime/target/debug/clif-util wasm --target aarch64-apple-darwin testcase.wat -p -t`

@@ -1739,6 +1739,14 @@ func (c *Compiler) lowerCurrentOpcode() {
 		state.pc++
 		vecOp, vecOpSize := wasm.ReadVecOpcode(c.wasmFunctionBody, state.pc)
 		state.pc += vecOpSize - 1
+		// Refuse before lowering rather than emit a vector instruction this CPU
+		// cannot execute. The engine turns the panic into an error naming the
+		// module, so the module is rejected instead of the process dying; see
+		// simdEmulated.
+		if emulateSIMD && !state.unreachable && !simdEmulated[vecOp] {
+			panic("TODO: no scalar lowering yet for " + wasm.VectorInstructionName(vecOp) +
+				" on a CPU without a vector unit")
+		}
 		switch vecOp {
 		case wasm.OpcodeVecV128Const:
 			state.pc++
@@ -1747,6 +1755,12 @@ func (c *Compiler) lowerCurrentOpcode() {
 			hi := binary.LittleEndian.Uint64(c.wasmFunctionBody[state.pc:])
 			state.pc += 7
 			if state.unreachable {
+				break
+			}
+			if emulateSIMD {
+				c.pushV128(
+					builder.AllocateInstruction().AsIconst64(lo).Insert(builder).Return(),
+					builder.AllocateInstruction().AsIconst64(hi).Insert(builder).Return())
 				break
 			}
 			ret := builder.AllocateInstruction().AsVconst(lo, hi).Insert(builder).Return()
@@ -1758,6 +1772,10 @@ func (c *Compiler) lowerCurrentOpcode() {
 			}
 			baseAddr := state.pop()
 			addr := c.memOpSetup(memIndex, baseAddr, offset, 16)
+			if emulateSIMD {
+				c.pushV128(c.v128LoadWords(addr, disp))
+				break
+			}
 			load := builder.AllocateInstruction()
 			load.AsLoad(addr, disp, ssa.TypeV128)
 			builder.InsertInstruction(load)
@@ -1894,6 +1912,12 @@ func (c *Compiler) lowerCurrentOpcode() {
 			if state.unreachable {
 				break
 			}
+			if emulateSIMD {
+				lo, hi := c.popV128()
+				addr := c.memOpSetup(memIndex, state.pop(), offset, 16)
+				c.v128StoreWords(lo, hi, addr, disp)
+				break
+			}
 			value := state.pop()
 			baseAddr := state.pop()
 			addr := c.memOpSetup(memIndex, baseAddr, offset, 16)
@@ -1934,11 +1958,20 @@ func (c *Compiler) lowerCurrentOpcode() {
 			if state.unreachable {
 				break
 			}
+			if emulateSIMD {
+				lo, hi := c.popV128()
+				c.pushV128(c.scalarBnot(lo), c.scalarBnot(hi))
+				break
+			}
 			v1 := state.pop()
 			ret := builder.AllocateInstruction().AsVbnot(v1).Insert(builder).Return()
 			state.push(ret)
 		case wasm.OpcodeVecV128And:
 			if state.unreachable {
+				break
+			}
+			if emulateSIMD {
+				c.v128Binary(c.scalarBand)
 				break
 			}
 			v2 := state.pop()
@@ -1949,6 +1982,10 @@ func (c *Compiler) lowerCurrentOpcode() {
 			if state.unreachable {
 				break
 			}
+			if emulateSIMD {
+				c.v128Binary(c.scalarBandnot)
+				break
+			}
 			v2 := state.pop()
 			v1 := state.pop()
 			ret := builder.AllocateInstruction().AsVbandnot(v1, v2).Insert(builder).Return()
@@ -1957,12 +1994,20 @@ func (c *Compiler) lowerCurrentOpcode() {
 			if state.unreachable {
 				break
 			}
+			if emulateSIMD {
+				c.v128Binary(c.scalarBor)
+				break
+			}
 			v2 := state.pop()
 			v1 := state.pop()
 			ret := builder.AllocateInstruction().AsVbor(v1, v2).Insert(builder).Return()
 			state.push(ret)
 		case wasm.OpcodeVecV128Xor:
 			if state.unreachable {
+				break
+			}
+			if emulateSIMD {
+				c.v128Binary(c.scalarBxor)
 				break
 			}
 			v2 := state.pop()
@@ -2081,6 +2126,12 @@ func (c *Compiler) lowerCurrentOpcode() {
 			case wasm.OpcodeVecI64x2Add:
 				lane = ssa.VecLaneI64x2
 			}
+			if emulateSIMD {
+				// Only i64x2 so far: a lane exactly one word wide needs no
+				// carry-isolation between lanes, so it is one add per word.
+				c.v128Binary(c.scalarIadd)
+				break
+			}
 			v2 := state.pop()
 			v1 := state.pop()
 			ret := builder.AllocateInstruction().AsVIadd(v1, v2, lane).Insert(builder).Return()
@@ -2160,6 +2211,10 @@ func (c *Compiler) lowerCurrentOpcode() {
 				lane = ssa.VecLaneI32x4
 			case wasm.OpcodeVecI64x2Sub:
 				lane = ssa.VecLaneI64x2
+			}
+			if emulateSIMD {
+				c.v128Binary(c.scalarIsub)
+				break
 			}
 			v2 := state.pop()
 			v1 := state.pop()
