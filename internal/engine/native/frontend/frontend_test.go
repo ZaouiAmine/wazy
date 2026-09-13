@@ -2738,6 +2738,11 @@ blk9: () <-- (blk4)
 }
 
 func TestSignatureForListener(t *testing.T) {
+	// The expected signatures carry ssa.TypeV128, which is the vector lowering's
+	// shape: where there is no vector unit a v128 becomes two words instead. Pin
+	// the mode so this describes one thing on every host.
+	defer pinVectorLowering()()
+
 	for _, tc := range []struct {
 		name          string
 		sig           *wasm.FunctionType
