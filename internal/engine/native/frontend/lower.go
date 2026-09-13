@@ -13,7 +13,6 @@ import (
 	"github.com/samyfodil/wazy/internal/engine/native/nativeapi"
 	"github.com/samyfodil/wazy/internal/engine/native/ssa"
 	"github.com/samyfodil/wazy/internal/leb128"
-	"github.com/samyfodil/wazy/internal/platform"
 	"github.com/samyfodil/wazy/internal/wasm"
 )
 
@@ -4871,28 +4870,6 @@ const memoryFillInlineMaxBytes = 256
 // inline loop's few nanoseconds beat the call; above it memclr's wider (and,
 // for very large sizes, non-temporal) stores win and the call is noise.
 const memoryFillMemclrMinBytes = 1024
-
-// fillStoreBytes is the store width the fill loops are built around: a 128-bit
-// vector where one can be executed, and a 64-bit word where one cannot.
-//
-// memory.fill is bulk-memory, not SIMD -- a module that never enables the SIMD
-// feature reaches this lowering -- but a 16-byte store still needs a vector
-// unit. On riscv64 that unit is the optional V extension, and plain RV64GC does
-// not have it, which is most shipping RISC-V silicon and is what the native CI
-// runner reports (`rv64imafdcsu`). There the wide form compiled to instructions
-// the CPU traps on: an illegal instruction from memory.fill, which every real
-// guest uses. amd64 does not select the compiler at all without SSE4.1 and arm64
-// always has NEON, so this only ever narrows on riscv64.
-var fillStoreBytes = func() uint32 {
-	if platform.SIMDSupported() {
-		return 16
-	}
-	return 8
-}()
-
-// memoryFillMainLoopBytes is how much the main loop writes per iteration: four
-// stores. Fills shorter than this skip it entirely.
-var memoryFillMainLoopBytes = 4 * fillStoreBytes
 
 // lowerMemoryFill emits the body of memory.fill for a region whose bounds the
 // caller has already checked. sizeDef is the defining instruction of the

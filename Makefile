@@ -569,14 +569,12 @@ windows_platforms     := windows_amd64 # TODO: add arm64 windows once we start t
 windows_archives      := $(windows_platforms:%=dist/wazy_$(VERSION)_%.zip)
 checksum_txt          := dist/wazy_$(VERSION)_checksums.txt
 
-# Macros for multi-platform builds, taking the target from the path being built:
-# build/wazy_<goos>_<goarch>/wazy[.exe]. Read out rather than guessed at -- the
-# previous form was `$(if $(findstring amd64,$1),amd64,arm64)`, which answers
-# arm64 for anything that is not amd64, so adding a third architecture would have
-# built an arm64 binary and named it riscv64.
-go-platform = $(patsubst wazy_%,%,$(notdir $(patsubst %/,%,$(dir $1))))
-go-os   = $(firstword $(subst _, ,$(call go-platform,$1)))
-go-arch = $(lastword $(subst _, ,$(call go-platform,$1)))
+# define macros for multi-platform builds. these parse the filename being built
+# riscv64 is named before the arm64 fallback: the fallback answers arm64 for
+# anything that is not amd64, so without its own arm a riscv64 archive would hold
+# an arm64 binary.
+go-arch = $(if $(findstring amd64,$1),amd64,$(if $(findstring riscv64,$1),riscv64,arm64))
+go-os   = $(if $(findstring .exe,$1),windows,$(if $(findstring linux,$1),linux,darwin))
 
 build/wazy_%/wazy:
 	$(call go-build,$@,$<)
